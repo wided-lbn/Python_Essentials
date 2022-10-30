@@ -1,0 +1,108 @@
+def corrigraph(df) :
+  # Instanciation du df
+  data = df
+  # Différenciation variables quanti / quali
+  data_num = data.select_dtypes(include=['int64','float64'])
+  data_cat = data.select_dtypes(include=['category', 'object', 'boolean'])
+  # Création d'un data constitué d'abord des colonnes quanti puis des colonnes quali (pour ordonner)
+  mergedData = data_num.merge(data_cat, left_index=True, right_index=True)
+  # Création des listes vides pour récupérer les infos calculées
+  all_tval = list() # Récupère toutes les valeurs de Test
+  all_pval = list() # Récupère toutes les valeurs de p-value
+  all_matrixval = list() # Récupère toutes les valeurs de p-value recalculées
+  all_tnames = list() # Récupère les noms des tests statistiques effectués
+  column_names = list() # Récupère les noms des colonnes testées
+  # On teste chaque variable une à une - test en fonction du type de la variable : quanti ou quali
+  for i in range(len(mergedData.columns)):
+    column_name = mergedData.columns[i]
+    column_names.append(column_name)
+    for j in range(len(mergedData.columns)):
+      if (mergedData.columns[i] in num_col_names and mergedData.columns[j] in num_col_names) :
+        tname = 'Pearson'
+        my_cor, pvalue = scipy.stats.pearsonr(mergedData.iloc[:,i],mergedData.iloc[:,j])
+        if pvalue == 0.0 :
+          matrixval = 0
+        elif pvalue < 0.001 :
+          matrixval = 2
+        elif pvalue < 0.05 :
+          matrixval = 1 
+        else :
+          matrixval = 0
+        #print('la pvalue est de ' + str(pvalue) + ' et la matrixval est de ' + str(matrixval))
+        all_tval.append(my_cor)
+        all_pval.append(pvalue)
+        all_matrixval.append(matrixval)
+        all_tnames.append(tname)
+      elif (mergedData.columns[i] in cat_col_names and mergedData.columns[j] in cat_col_names) :
+        tname = 'Chi2'
+        data_cat_crosstab = pd.crosstab(mergedData.iloc[:,i], mergedData.iloc[:,j])
+        khi2, pvalue, ddl, contingent_theorique = chi2_contingency(data_cat_crosstab)
+        if pvalue == 0.0 :
+          matrixval = 0
+        elif pvalue < 0.001 :
+          matrixval = 2
+        elif pvalue < 0.05 :
+          matrixval = 1 
+        else :
+          matrixval = 0
+        #print('la pvalue est de ' + str(pvalue) + ' et la matrixval est de ' + str(matrixval))
+        all_tval.append(khi2)
+        all_pval.append(pvalue)
+        all_matrixval.append(matrixval)
+        all_tnames.append(tname)
+      else : 
+        if (mergedData.columns[i] in num_col_names and mergedData.columns[j] in cat_col_names) :
+          tname = 'Kruskal'
+          kstat, pvalue= scipy.stats.kruskal(*[group[mergedData.columns[i]].values for name, group in mergedData.groupby(mergedData.columns[j])])
+          if pvalue == 0.0 :
+            matrixval = 0
+          elif pvalue < 0.001 :
+            matrixval = 2
+          elif pvalue < 0.05 :
+            matrixval = 1 
+          else :
+            matrixval = 0
+          #print('la pvalue est de ' + str(pvalue) + ' et la matrixval est de ' + str(matrixval))
+          all_tval.append(kstat)
+          all_pval.append(pvalue)
+          all_matrixval.append(matrixval)
+          all_tnames.append(tname)
+        else :
+          tname = 'Kruskal'
+          kstat, pvalue= scipy.stats.kruskal(*[group[mergedData.columns[j]].values for name, group in mergedData.groupby(mergedData.columns[i])])
+          if pvalue == 0.0 :
+            matrixval = 0
+          elif pvalue < 0.001 :
+            matrixval = 2
+          elif pvalue < 0.05 :
+            matrixval = 1 
+          else :
+            matrixval = 0
+          #print('la pvalue est de ' + str(pvalue) + ' et la matrixval est de ' + str(matrixval))
+          all_tval.append(kstat)
+          all_pval.append(pvalue)
+          all_matrixval.append(matrixval)
+          all_tnames.append(tname)
+  # Création du graphe
+  # Je transforme la liste des valeurs de corrélation en array !! Il faut transformer les valeurs des tests en '0, 1 et 2 en fonction de la force de la corrélation / relation
+  A = np.array(all_matrixval) ; A=A.reshape(len(column_names),len(column_names))
+  # J'instancie G
+  G = nx.from_numpy_matrix(A)
+  #G
+  # Je crée un dictionnaire pour les labels
+  dic = { i : column_names[i] for i in range(0, len(column_names) ) }
+  #dic
+  G = nx.relabel_nodes(G, dic) # Nommer les labels
+
+  # Je calcule l'importance 
+  importance = dict(nx.degree(G))
+  importance = [v*v*v+40 for v in importance.values()]
+
+  # Je crée le graphe et je le visualise
+  plt.figure(figsize=(10,6))
+  nx.draw(G,with_labels=True,font_size=8,
+       alpha=0.8,
+       node_color="#F9CD45",
+       node_size = importance)
+
+  plt.show()
